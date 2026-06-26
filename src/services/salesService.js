@@ -56,6 +56,37 @@ export async function getSaleByInvoiceNumber(invoiceNumber) {
   return data
 }
 
+export async function getNextInvoiceNumber() {
+  const currentYear = new Date().getFullYear()
+  const prefix = `SMH-${currentYear}-`
+  
+  const { data, error } = await supabase
+    .from(salesTable)
+    .select('invoice_number')
+    .like('invoice_number', `${prefix}%`)
+    .order('invoice_number', { ascending: false })
+    .limit(1)
+
+  if (error || !data || data.length === 0) {
+    return `${prefix}000001`
+  }
+
+  const lastInvoice = data[0].invoice_number
+  const parts = lastInvoice.split('-')
+  if (parts.length < 3) {
+    return `${prefix}000001`
+  }
+  
+  const lastNum = parseInt(parts[2], 10)
+  if (isNaN(lastNum)) {
+    return `${prefix}000001`
+  }
+  
+  const nextNum = lastNum + 1
+  const paddedNum = String(nextNum).padStart(6, '0')
+  return `${prefix}${paddedNum}`
+}
+
 export async function createSale(sale, items) {
   if (!sale.customer_id) {
     throw new Error('Customer is required')
@@ -83,37 +114,48 @@ export async function createSale(sale, items) {
     }
   }
 
+  // Insert Sale
   const { data: saleData, error: saleError } = await supabase.from(salesTable).insert([sale]).select('id').single()
   if (saleError) {
     throw new Error(saleError.message)
   }
 
-  const saleItems = items.map((item) => ({
-    sale_id: saleData.id,
-    product_id: item.product_id,
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    total_price: item.total,
-  }))
+  const saleId = saleData.id
 
-  const { error: itemsError } = await supabase.from(saleItemsTable).insert(saleItems)
-  if (itemsError) {
-    throw new Error(itemsError.message)
-  }
+  try {
+    const saleItems = items.map((item) => ({
+      sale_id: saleId,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total_price: item.total,
+    }))
 
-  for (const item of items) {
-    const newStock = (stockMap[item.product_id] ?? 0) - item.quantity
-    const { error: updateError } = await supabase
-      .from(productsTable)
-      .update({ stock_quantity: newStock })
-      .eq('id', item.product_id)
-
-    if (updateError) {
-      throw new Error(updateError.message)
+    // Insert Items
+    const { error: itemsError } = await supabase.from(saleItemsTable).insert(saleItems)
+    if (itemsError) {
+      throw new Error(itemsError.message)
     }
-  }
 
-  return saleData
+    // Update Stock
+    for (const item of items) {
+      const newStock = (stockMap[item.product_id] ?? 0) - item.quantity
+      const { error: updateError } = await supabase
+        .from(productsTable)
+        .update({ stock_quantity: newStock })
+        .eq('id', item.product_id)
+
+      if (updateError) {
+        throw new Error(updateError.message)
+      }
+    }
+
+    return saleData
+  } catch (err) {
+    // Transactional Rollback
+    await supabase.from(salesTable).delete().eq('id', saleId)
+    throw err
+  }
 }
 
 export async function fetchSaleItems(saleId) {

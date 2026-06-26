@@ -20,6 +20,8 @@ import PaymentDetails from '../pages/payments/PaymentDetails'
 import ExpensesList from '../pages/expenses/ExpensesList'
 import NewExpense from '../pages/expenses/NewExpense'
 import EditExpense from '../pages/expenses/EditExpense'
+import Reports from '../pages/reports/Reports'
+import Settings from '../pages/settings/Settings'
 import NotFound from '../pages/NotFound'
 
 export default function AppRoutes() {
@@ -48,6 +50,8 @@ export default function AppRoutes() {
           <Route path="expenses" element={<ExpensesList />} />
           <Route path="expenses/new" element={<NewExpense />} />
           <Route path="expenses/edit/:id" element={<EditExpense />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Route>
 

@@ -9,6 +9,7 @@ import useCustomers from '../../hooks/useCustomers'
 import useProducts from '../../hooks/useProducts'
 import useSales from '../../hooks/useSales'
 import { formatCurrency } from '../../utils/format'
+import { getNextInvoiceNumber } from '../../services/salesService'
 
 const initialRow = {
     product_id: '',
@@ -29,13 +30,22 @@ export default function NewSale() {
     const [paymentStatus, setPaymentStatus] = useState('Paid')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [invoiceNumber, setInvoiceNumber] = useState('')
 
     useEffect(() => {
         loadCustomers()
         fetchProducts()
+        
+        const fetchNextInvoice = async () => {
+            try {
+                const nextNum = await getNextInvoiceNumber()
+                setInvoiceNumber(nextNum)
+            } catch (err) {
+                console.error('Failed to fetch invoice number', err)
+            }
+        }
+        fetchNextInvoice()
     }, [loadCustomers, fetchProducts])
-
-    const invoiceNumber = useMemo(() => `INV-${new Date().getTime()}`, [])
 
     const updateRow = (index, updates) => {
         setItems((current) =>
@@ -66,7 +76,7 @@ export default function NewSale() {
     }
 
     const subtotal = useMemo(() => items.reduce((sum, item) => sum + Number(item.total || 0), 0), [items])
-    const gst = useMemo(() => Number((subtotal * 0.18).toFixed(2)), [subtotal])
+    const gst = useMemo(() => Number((subtotal * 0.12).toFixed(2)), [subtotal])
     const grandTotal = useMemo(() => subtotal + gst, [subtotal, gst])
 
     const validateSale = () => {
@@ -104,7 +114,7 @@ export default function NewSale() {
                 invoice_number: invoiceNumber,
                 invoice_date: new Date().toISOString().split("T")[0],
                 subtotal,
-                gst_percentage: 18, // ya jo GST percentage hai
+                gst_percentage: 12,
                 gst_amount: gst,
                 total_amount: grandTotal,
                 payment_status: paymentStatus,
